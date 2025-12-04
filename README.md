@@ -1,4 +1,5 @@
- <meta charset="UTF-8">
+
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LaMeave | Premium Wellness Infographic (Admin V3 - Firebase Ready)</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -512,13 +513,13 @@
         // Firebase Console > 프로젝트 설정 > 일반 > 내 앱 섹션에서 찾을 수 있습니다.
         // 이 부분을 복사해서 통째로 붙여넣어야 합니다. (projectId, apiKey 등이 모두 포함되어야 함)
         const firebaseConfig = {
-    apiKey: "사용자님의_실제_API_KEY_값", 
-    authDomain: "사용자님의_실제_AUTH_DOMAIN_값",
-    projectId: "사용자님의_실제_PROJECT_ID_값",
-    storageBucket: "사용자님의_실제_STORAGE_BUCKET_값",
-    messagingSenderId: "사용자님의_실제_MESSAGING_SENDER_ID_값",
-    appId: "사용자님의_실제_APP_ID_값" 
-};
+            // 예시: apiKey: "YOUR_API_KEY_HERE",
+            // 예시: authDomain: "YOUR_AUTH_DOMAIN_HERE",
+            // 예시: projectId: "YOUR_PROJECT_ID_HERE",
+            // 예시: storageBucket: "YOUR_STORAGE_BUCKET_HERE",
+            // 예시: messagingSenderId: "YOUR_MESSAGING_SENDER_ID_HERE",
+            // 예시: appId: "YOUR_APP_ID_HERE"
+        }; 
         
         let db;
         const DOC_ID = 'lameave_content_v2';
