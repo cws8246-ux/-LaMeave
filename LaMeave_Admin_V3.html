@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaMeave | Premium Wellness Infographic (Admin V3 - Firebase Ready)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Admin Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        /* Custom Font Setup */
+        .font-serif { font-family: 'Playfair Display', serif; }
+        .font-sans { font-family: 'Noto Sans KR', sans-serif; }
+
+        /* Chart Container Styling */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px; 
+            max-height: 400px;
+        }
+        @media (max-width: 640px) {
+            .chart-container { height: 300px; }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #FDFBF7; }
+        ::-webkit-scrollbar-thumb { background: #F37021; border-radius: 4px; }
+
+        /* Animations */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-up { animation: fadeUp 0.8s ease-out forwards; }
+        
+        /* --- ADMIN MODE STYLES --- */
+        .editing-mode [data-key]:not(canvas) {
+            cursor: pointer;
+            outline: 1px dashed rgba(243, 112, 33, 0.3); /* Soft Orange Outline */
+            transition: all 0.2s;
+        }
+        
+        /* Selected Element Highlight */
+        .editing-mode [data-key].admin-selected {
+            outline: 2px solid #F37021; /* Strong Orange */
+            background-color: rgba(243, 112, 33, 0.05);
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Admin Toolbar */
+        #admin-toolbar {
+            transition: transform 0.3s ease-in-out;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        }
+        #admin-toolbar.hidden-toolbar {
+            transform: translateY(120%);
+        }
+        
+        /* Control Buttons */
+        .admin-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background-color: #f3f4f6;
+            color: #333;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .admin-btn:hover { background-color: #e5e7eb; transform: scale(1.05); }
+        .admin-btn:active { transform: scale(0.95); }
+        .admin-btn.primary { background-color: #F37021; color: white; width: auto; padding: 0 20px; }
+        .admin-btn.primary:hover { background-color: #d95e16; }
+
+        /* Tooltip */
+        .admin-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 12px;
+            border-right: 1px solid #e5e7eb;
+        }
+        .admin-group:last-child { border-right: none; }
+        .admin-label { font-size: 10px; color: #888; margin-bottom: 2px; text-transform: uppercase; text-align: center; display: block;}
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'hermes-orange': '#F37021',
+                        'deep-charcoal': '#333333',
+                        'cream-bg': '#FDFBF7',
+                        'soft-gray': '#E5E5E5',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-cream-bg text-deep-charcoal font-sans antialiased selection:bg-hermes-orange selection:text-white pb-32">
+
+    <!-- Password Modal -->
+    <div id="password-modal" class="fixed inset-0 bg-deep-charcoal bg-opacity-70 z-[100] flex items-center justify-center hidden">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm fade-up relative">
+            <button onclick="document.getElementById('password-modal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
+            <h3 class="text-xl font-bold mb-2 font-serif text-center">Admin Login</h3>
+            <p class="text-sm text-gray-500 mb-6 text-center">관리자 설정을 위해 비밀번호를 입력하세요.</p>
+            <input type="password" id="admin-password" placeholder="비밀번호" class="w-full p-3 border border-gray-300 rounded-lg mb-4 text-center text-lg tracking-widest focus:ring-hermes-orange focus:border-hermes-orange">
+            <button onclick="checkPassword()" class="w-full bg-deep-charcoal text-white py-3 rounded-lg font-bold hover:bg-hermes-orange transition-colors">관리자 모드 시작</button>
+            <p id="password-error" class="text-red-500 text-sm mt-3 text-center hidden">비밀번호가 일치하지 않습니다.</p>
+        </div>
+    </div>
+
+    <!-- Admin Toolbar (Floating Bottom) -->
+    <div id="admin-toolbar" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-white rounded-xl px-4 py-3 flex items-center gap-2 z-[90] hidden-toolbar max-w-[90vw] overflow-x-auto border border-gray-200">
+        <!-- Status -->
+        <div class="flex flex-col items-start pr-4 border-r border-gray-200 mr-2 min-w-[100px]">
+            <span class="text-[10px] font-bold text-hermes-orange uppercase tracking-wider">Editing Mode</span>
+            <span id="selected-tag-name" class="text-xs text-gray-500 truncate w-24">요소 선택 대기중...</span>
+        </div>
+
+        <!-- Font Size Controls -->
+        <div class="flex flex-col items-center border-r border-gray-200 px-3">
+            <span class="text-[10px] text-gray-400 uppercase mb-1">크기 (Size)</span>
+            <div class="flex gap-1">
+                <button onclick="adjustStyle('fontSize', -1)" class="admin-btn" title="작게"><i class="fa-solid fa-minus"></i></button>
+                <button onclick="adjustStyle('fontSize', 1)" class="admin-btn" title="크게"><i class="fa-solid fa-plus"></i></button>
+            </div>
+        </div>
+
+        <!-- Spacing Controls -->
+        <div class="flex flex-col items-center border-r border-gray-200 px-3">
+            <span class="text-[10px] text-gray-400 uppercase mb-1">자간/줄간격</span>
+            <div class="flex gap-1">
+                <button onclick="adjustStyle('letterSpacing', 0.5)" class="admin-btn" title="자간 넓게"><i class="fa-solid fa-arrows-left-right"></i></button>
+                <button onclick="adjustStyle('lineHeight', 0.1)" class="admin-btn" title="줄간격 넓게"><i class="fa-solid fa-arrows-up-down"></i></button>
+            </div>
+        </div>
+
+        <!-- Style Toggles -->
+        <div class="flex flex-col items-center border-r border-gray-200 px-3">
+            <span class="text-[10px] text-gray-400 uppercase mb-1">스타일</span>
+            <div class="flex gap-1">
+                <button onclick="toggleStyle('fontWeight', 'bold', 'normal')" class="admin-btn font-bold" title="굵게">B</button>
+                <button onclick="toggleStyle('fontStyle', 'italic', 'normal')" class="admin-btn italic" title="기울임">I</button>
+            </div>
+        </div>
+
+        <!-- Save Action -->
+        <div class="pl-2">
+            <button onclick="saveAndExitAdmin()" class="admin-btn primary shadow-lg">
+                <i class="fa-solid fa-floppy-disk mr-2"></i> 저장 및 종료
+            </button>
+        </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-gray-100 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="text-2xl font-serif font-bold tracking-widest text-deep-charcoal" data-key="nav.logo">LaMeave</div>
+            <div class="hidden md:flex space-x-8 text-sm font-medium text-gray-500">
+                <a href="#philosophy" class="hover:text-hermes-orange transition-colors" data-key="nav.link1">Philosophy</a>
+                <a href="#curriculum" class="hover:text-hermes-orange transition-colors" data-key="nav.link2">Curriculum</a>
+                <a href="#roadmap" class="hover:text-hermes-orange transition-colors" data-key="nav.link3">Roadmap</a>
+                <a href="#pricing" class="hover:text-hermes-orange transition-colors" data-key="nav.link4">Pricing</a>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button class="bg-deep-charcoal text-white px-5 py-2 text-xs uppercase tracking-widest hover:bg-hermes-orange transition-colors duration-300" data-key="nav.button">
+                    예약하기
+                </button>
+                <button onclick="toggleAdminPanel()" class="border border-gray-300 text-gray-500 px-3 py-2 text-xs rounded-lg hover:bg-gray-50 hover:text-hermes-orange transition-colors duration-300">
+                    <i class="fa-solid fa-gear mr-1"></i> 설정
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="relative py-20 md:py-32 px-4 text-center overflow-hidden">
+        <div class="max-w-4xl mx-auto relative z-10 fade-up">
+            <p class="text-hermes-orange font-bold tracking-[0.3em] uppercase mb-4 text-sm md:text-base" data-key="hero.category">French Chic Wellness Lounge</p>
+            <h1 class="text-5xl md:text-7xl font-serif font-medium text-deep-charcoal mb-6 leading-tight" data-key="hero.title">
+                Elevate Me,<br><span class="italic text-hermes-orange">LaMeave</span>
+            </h1>
+            <p class="text-gray-600 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-10" data-key="hero.subtitle">
+                내면(마음)과 외면(몸)의 균형을 되찾아,<br>
+                나를 더 아름답게, 밝게, 가볍게 만드는 공간.
+            </p>
+            
+            <!-- Etymology Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto mt-12">
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-hermes-orange transform hover:-translate-y-1 transition-transform duration-300">
+                    <span class="block text-3xl font-serif text-hermes-orange mb-2" data-key="etymology.la.title">La</span>
+                    <span class="text-xs uppercase text-gray-400 tracking-wider" data-key="etymology.la.desc">The (French Article)</span>
+                    <p class="text-sm mt-2 text-gray-600" data-key="etymology.la.body">더 높은 가치를 향한<br>유일한 선택</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-deep-charcoal transform hover:-translate-y-1 transition-transform duration-300">
+                    <span class="block text-3xl font-serif text-deep-charcoal mb-2" data-key="etymology.me.title">Me</span>
+                    <span class="text-xs uppercase text-gray-400 tracking-wider" data-key="etymology.me.desc">Myself</span>
+                    <p class="text-sm mt-2 text-gray-600" data-key="etymology.me.body">오롯이 나에게 집중하는<br>프라이빗 타임</p>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-md border-t-4 border-hermes-orange transform hover:-translate-y-1 transition-transform duration-300">
+                    <span class="block text-3xl font-serif text-hermes-orange mb-2" data-key="etymology.ave.title">Ave</span>
+                    <span class="text-xs uppercase text-gray-400 tracking-wider" data-key="etymology.ave.desc">Elevate</span>
+                    <p class="text-sm mt-2 text-gray-600" data-key="etymology.ave.body">나의 아름다움을<br>가장 높게 끌어올리다</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Philosophy: Homeostasis -->
+    <section id="philosophy" class="py-20 bg-white">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-4xl font-serif text-deep-charcoal mb-4" data-key="philosophy.title">Why Homeostasis?</h2>
+                <p class="text-gray-500 max-w-2xl mx-auto" data-key="philosophy.subtitle">
+                    단순한 감량이 아닙니다. 깨진 신체 리듬을 바로잡아 
+                    <span class="text-hermes-orange font-bold">살이 찌지 않는 체질</span>로 변화시키는 것이 목표입니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div class="text-center p-6 bg-cream-bg rounded-xl hover:shadow-lg transition-shadow">
+                    <div class="text-4xl mb-3" data-key="philo_icon1.emoji">🌙</div>
+                    <h3 class="font-bold text-deep-charcoal" data-key="philo_icon1.title">Sleep</h3>
+                    <p class="text-xs text-gray-500 mt-1" data-key="philo_icon1.desc">수면 패턴 안정화</p>
+                </div>
+                <div class="text-center p-6 bg-cream-bg rounded-xl hover:shadow-lg transition-shadow">
+                    <div class="text-4xl mb-3" data-key="philo_icon2.emoji">💧</div>
+                    <h3 class="font-bold text-deep-charcoal" data-key="philo_icon2.title">Hydration</h3>
+                    <p class="text-xs text-gray-500 mt-1" data-key="philo_icon2.desc">올바른 수분 섭취</p>
+                </div>
+                <div class="text-center p-6 bg-cream-bg rounded-xl hover:shadow-lg transition-shadow">
+                    <div class="text-4xl mb-3" data-key="philo_icon3.emoji">🍽️</div>
+                    <h3 class="font-bold text-deep-charcoal" data-key="philo_icon3.title">Diet</h3>
+                    <p class="text-xs text-gray-500 mt-1" data-key="philo_icon3.desc">영양 균형 식단</p>
+                </div>
+                <div class="text-center p-6 bg-cream-bg rounded-xl hover:shadow-lg transition-shadow">
+                    <div class="text-4xl mb-3" data-key="philo_icon4.emoji">🔥</div>
+                    <h3 class="font-bold text-deep-charcoal" data-key="philo_icon4.title">Metabolism</h3>
+                    <p class="text-xs text-gray-500 mt-1" data-key="philo_icon4.desc">체온 유지 및 순환</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Curriculum Section -->
+    <section id="curriculum" class="py-20 px-4">
+        <div class="max-w-6xl mx-auto">
+            <div class="mb-16">
+                <span class="text-hermes-orange font-bold tracking-widest uppercase text-xs block mb-2" data-key="curriculum.category">Curriculum</span>
+                <h2 class="text-3xl md:text-5xl font-serif text-deep-charcoal mb-8" data-key="curriculum.title">70min Premium Care</h2>
+                <p class="text-lg text-gray-600 border-l-4 border-hermes-orange pl-4 italic" data-key="curriculum.summary">
+                    "웰컴티 → 인바디 상담 → 프렌치 엘레베이션 테라피 → 프렌치 리프팅 → 닥터 테라피"
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-16">
+                
+                <!-- Step 0 & 1 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                    <div>
+                        <div class="flex items-center mb-4">
+                            <span class="bg-deep-charcoal text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-3" data-key="step0.num">0</span>
+                            <h3 class="text-2xl font-serif text-hermes-orange" data-key="step0.title">L'Orange Vital (웰컴 & 뉴트리션)</h3>
+                        </div>
+                        <p class="text-gray-600 mb-8 pl-11" data-key="step0.body">
+                            근육 세포를 깨우는 <strong>크레아틴 & BCAA 웰컴티</strong>로 활력 시스템을 리셋합니다. 관리를 위한 몸의 활력 시스템을 리셋하는 LaMeave만의 시그니처 준비 단계입니다.
+                        </p>
+
+                        <div class="flex items-center mb-4">
+                            <span class="bg-hermes-orange text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-3" data-key="step1.num">1</span>
+                            <h3 class="text-2xl font-serif text-deep-charcoal" data-key="step1.title">Diagnostic Archiving (정밀 진단 & 홈케어)</h3>
+                        </div>
+                        <p class="text-gray-600 mb-6 pl-11" data-key="step1.body">
+                            인바디 데이터와 8가지 생활 패턴 컨설팅을 통해 
+                            개인 맞춤형 <strong>항상성 회복 솔루션</strong>을 설계합니다.
+                        </p>
+                    </div>
+                    
+                    <!-- Chart 1: Body Balance -->
+                    <div class="bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                        <div class="mb-4">
+                            <h4 class="font-bold text-sm text-gray-500 uppercase tracking-wide text-center" data-key="chart1.title">Body Balance Archive</h4>
+                            <p class="text-xs text-gray-400 text-center" data-key="chart1.subtitle">Before vs Ideal Target</p>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="bodyBalanceChart"></canvas>
+                        </div>
+                        <div class="mt-4 text-xs text-center text-gray-500 bg-gray-50 p-2 rounded" data-key="chart1.footer">
+                            * 고객님의 현재 상태(수분, 근육, 순환 등)를 다각도로 분석하여 시각화합니다.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                    <div class="order-2 md:order-1 bg-white p-6 rounded-2xl shadow-lg border border-gray-100">
+                        <div class="mb-4">
+                            <h4 class="font-bold text-sm text-gray-500 uppercase tracking-wide text-center" data-key="chart2.title">Efficiency Comparison</h4>
+                            <p class="text-xs text-gray-400 text-center" data-key="chart2.subtitle">LaMeave 20min vs Traditional Gym</p>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="efficiencyChart"></canvas>
+                        </div>
+                        <div class="mt-4 text-xs text-center text-gray-500 bg-gray-50 p-2 rounded" data-key="chart2.footer">
+                            * 단 20분 관리로 최대 6시간의 운동 효과를 경험하세요. (EMS 기능 기반)
+                        </div>
+                    </div>
+
+                    <div class="order-1 md:order-2">
+                        <div class="flex items-center mb-4">
+                            <span class="bg-hermes-orange text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-3" data-key="step2.num">2</span>
+                            <h3 class="text-2xl font-serif text-deep-charcoal" data-key="step2.title">French Élimination Therapy (엘레베이션)</h3>
+                        </div>
+                        <h4 class="text-lg font-medium text-gray-800 mb-2 pl-11" data-key="step2.subtitle">EMS & Bio-Photon Therapy</h4>
+                        <p class="text-gray-600 mb-6 pl-11 leading-relaxed" data-key="step2.body">
+                            신체 균형을 되찾는 <strong>바이오포톤(빛)</strong>과 심부 근육을 자극하는 <strong>프렌치 EMS</strong>의 결합.<br>
+                            누워서 강력한 대사 활성화 및 지방 연소 효과를 끌어냅니다.
+                        </p>
+                        <ul class="pl-11 space-y-2 text-sm text-gray-500">
+                            <li class="flex items-center"><span class="text-hermes-orange mr-2">✓</span> <span data-key="step2.benefit1">신진대사 활성화</span></li>
+                            <li class="flex items-center"><span class="text-hermes-orange mr-2">✓</span> <span data-key="step2.benefit2">심부 체온 상승</span></li>
+                            <li class="flex items-center"><span class="text-hermes-orange mr-2">✓</span> <span data-key="step2.benefit3">관절 부담 없는 근력 강화</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Step 3 & 4 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div class="bg-white p-8 rounded-2xl border-l-8 border-hermes-orange shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center mb-6">
+                            <span class="bg-hermes-orange text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-3" data-key="step3.num">3</span>
+                            <h3 class="text-xl font-serif text-deep-charcoal" data-key="step3.title">French Illumination & Flow (프렌치 리프팅)</h3>
+                        </div>
+                        <div class="flex items-center justify-center mb-6 text-5xl" data-key="step3.emoji">✨</div>
+                        <p class="text-gray-600 mb-4 text-center" data-key="step3.body">
+                            <strong>화이트 태닝 & 순환실 케어</strong><br>
+                            콜라겐 생성을 촉진하여 피부 본연의 투명도와 탄력을 회복하고, 체내 독소 배출을 원활하게 합니다.
+                        </p>
+                    </div>
+
+                    <div class="bg-white p-8 rounded-2xl border-l-8 border-deep-charcoal shadow-sm hover:shadow-md transition-shadow">
+                        <div class="flex items-center mb-6">
+                            <span class="bg-deep-charcoal text-white rounded-full w-8 h-8 flex items-center justify-center font-bold mr-3" data-key="step4.num">4</span>
+                            <h3 class="text-xl font-serif text-deep-charcoal" data-key="step4.title">Dr. Meave Finishing (닥터 테라피)</h3>
+                        </div>
+                        <div class="flex items-center justify-center mb-6 text-5xl" data-key="step4.emoji">💆‍♀️</div>
+                        <p class="text-gray-600 mb-4 text-center" data-key="step4.body">
+                            <strong>닥터 테라피 마사지 & 컨투어링 팩</strong><br>
+                            전문적인 림프 순환 집중 케어로 얼굴 및 바디의 윤곽을 정리하고, 프리미엄 팩으로 관리를 완성합니다.
+                        </p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Roadmap & Results Section -->
+    <section id="roadmap" class="py-20 bg-deep-charcoal text-white">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="mb-12 text-center">
+                <span class="text-hermes-orange font-bold tracking-widest uppercase text-xs block mb-2" data-key="roadmap.category">The Journey</span>
+                <h2 class="text-3xl md:text-4xl font-serif mb-6" data-key="roadmap.title">Slim Roadmap</h2>
+                <p class="text-gray-400 max-w-2xl mx-auto" data-key="roadmap.subtitle">
+                    체중 감량은 직선이 아닙니다. LaMeave는 4단계 로드맵을 통해<br> 
+                    정체기를 극복하고 요요 없는 안정화를 이끌어냅니다.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                <!-- Chart 3: Roadmap -->
+                <div class="bg-white/5 p-6 rounded-2xl border border-white/10">
+                    <div class="chart-container">
+                        <canvas id="roadmapChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Phases -->
+                <div class="space-y-6">
+                    <div class="flex">
+                        <div class="flex-shrink-0 w-12 h-12 rounded-full bg-hermes-orange/20 flex items-center justify-center text-hermes-orange font-bold mr-4" data-key="roadmap_ph1.num">1</div>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1" data-key="roadmap_ph1.title">감량기 (Loss Phase)</h4>
+                            <p class="text-sm text-gray-400" data-key="roadmap_ph1.desc">신진대사 활성화로 지방 연소가 촉진되는 시기</p>
+                        </div>
+                    </div>
+                    <div class="flex">
+                        <div class="flex-shrink-0 w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-gray-300 font-bold mr-4" data-key="roadmap_ph2.num">2</div>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1" data-key="roadmap_ph2.title">정체기 (Plateau)</h4>
+                            <p class="text-sm text-gray-400" data-key="roadmap_ph2.desc">체질 변환이 중요한 시점. 체중 유지 및 근육 보호 집중.</p>
+                        </div>
+                    </div>
+                    <div class="flex">
+                        <div class="flex-shrink-0 w-12 h-12 rounded-full bg-hermes-orange/20 flex items-center justify-center text-hermes-orange font-bold mr-4" data-key="roadmap_ph3.num">3</div>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1" data-key="roadmap_ph3.title">고도 감량기 (High Loss)</h4>
+                            <p class="text-sm text-gray-400" data-key="roadmap_ph3.desc">감량 가속화 및 눈에 띄는 체형 변화의 시기</p>
+                        </div>
+                    </div>
+                    <div class="flex">
+                        <div class="flex-shrink-0 w-12 h-12 rounded-full bg-white/10 flex items-center justify-center text-gray-300 font-bold mr-4" data-key="roadmap_ph4.num">4</div>
+                        <div>
+                            <h4 class="font-bold text-lg mb-1" data-key="roadmap_ph4.title">체질 안정화 (Stabilization)</h4>
+                            <p class="text-sm text-gray-400" data-key="roadmap_ph4.desc">요요 없이 건강하고 살찌지 않는 체질 완성</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expected Results Bar Chart -->
+            <div class="mt-20">
+                <div class="text-center mb-8">
+                    <h3 class="text-2xl font-serif" data-key="chart4.title">Program Effectiveness</h3>
+                    <p class="text-gray-400 text-sm" data-key="chart4.subtitle">관리 횟수별 기대 감량 효과</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl text-deep-charcoal max-w-4xl mx-auto">
+                    <div class="chart-container">
+                        <canvas id="effectivenessChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="py-20 bg-cream-bg">
+        <div class="max-w-5xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl md:text-5xl font-serif text-deep-charcoal mb-4" data-key="pricing.title">Program Pricing</h2>
+                <p class="text-gray-600" data-key="pricing.subtitle">70min Premium Slim Care (EMS, Bio-Photon, White Tanning, Dr. Therapy)</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <!-- Tier 1 -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm hover:shadow-xl transition-shadow border border-gray-100 relative">
+                    <h3 class="text-xl font-bold text-gray-400 mb-2" data-key="pricing.tier1.name">Starter</h3>
+                    <div class="text-4xl font-serif font-bold text-deep-charcoal mb-4" data-key="pricing.tier1.price">2,500,000<span class="text-sm text-gray-500 font-sans font-normal">원</span></div>
+                    <div class="text-hermes-orange font-bold text-lg mb-6" data-key="pricing.tier1.sessions">24 Sessions</div>
+                    <ul class="space-y-3 text-sm text-gray-600 mb-8">
+                        <li>• <span data-key="pricing.tier1.desc1">기간: 2개월</span></li>
+                        <li>• <span data-key="pricing.tier1.desc2">목표: 4kg 이상 감량</span></li>
+                        <li>• <span data-key="pricing.tier1.desc3">단기 집중 케어</span></li>
+                    </ul>
+                    <button class="w-full py-3 border border-deep-charcoal text-deep-charcoal rounded hover:bg-deep-charcoal hover:text-white transition-colors" data-key="pricing.tier1.button">Select Plan</button>
+                </div>
+
+                <!-- Tier 2 (Best Value) -->
+                <div class="bg-white p-8 rounded-2xl shadow-xl border-t-8 border-hermes-orange transform md:-translate-y-4 relative z-10">
+                    <div class="absolute top-0 right-0 bg-hermes-orange text-white text-xs font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider" data-key="pricing.tier2.tag">Best Choice</div>
+                    <h3 class="text-xl font-bold text-deep-charcoal mb-2" data-key="pricing.tier2.name">Standard</h3>
+                    <div class="text-5xl font-serif font-bold text-deep-charcoal mb-4" data-key="pricing.tier2.price">3,300,000<span class="text-sm text-gray-500 font-sans font-normal">원</span></div>
+                    <div class="text-hermes-orange font-bold text-lg mb-6" data-key="pricing.tier2.sessions">36 Sessions</div>
+                    <ul class="space-y-3 text-sm text-gray-600 mb-8">
+                        <li>• <span data-key="pricing.tier2.desc1">기간: 3개월</span></li>
+                        <li>• <span data-key="pricing.tier2.desc2">목표: 8kg 이상 감량</span></li>
+                        <li>• <span data-key="pricing.tier2.desc3">체질 개선 최적화</span></li>
+                        <li class="font-bold text-hermes-orange">• <span data-key="pricing.tier2.desc4">10% 추가 할인 적용</span></li>
+                    </ul>
+                    <button class="w-full py-3 bg-hermes-orange text-white rounded shadow-lg hover:bg-orange-600 transition-colors font-bold" data-key="pricing.tier2.button">Select Plan</button>
+                </div>
+
+                <!-- Tier 3 -->
+                <div class="bg-white p-8 rounded-2xl shadow-sm hover:shadow-xl transition-shadow border border-gray-100">
+                    <h3 class="text-xl font-bold text-gray-400 mb-2" data-key="pricing.tier3.name">Premium</h3>
+                    <div class="text-4xl font-serif font-bold text-deep-charcoal mb-4" data-key="pricing.tier3.price">4,800,000<span class="text-sm text-gray-500 font-sans font-normal">원</span></div>
+                    <div class="text-hermes-orange font-bold text-lg mb-6" data-key="pricing.tier3.sessions">60 Sessions</div>
+                    <ul class="space-y-3 text-sm text-gray-600 mb-8">
+                        <li>• <span data-key="pricing.tier3.desc1">기간: 5개월</span></li>
+                        <li>• <span data-key="pricing.tier3.desc2">목표: 15kg 이상 감량</span></li>
+                        <li>• <span data-key="pricing.tier3.desc3">완벽한 바디 리셋</span></li>
+                    </ul>
+                    <button class="w-full py-3 border border-deep-charcoal text-deep-charcoal rounded hover:bg-deep-charcoal hover:text-white transition-colors" data-key="pricing.tier3.button">Select Plan</button>
+                </div>
+            </div>
+            <p class="text-center text-xs text-gray-400 mt-8" data-key="pricing.footer">* VAT 포함 가격입니다.</p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-deep-charcoal text-white py-12 text-center">
+        <h2 class="text-3xl font-serif font-bold tracking-widest mb-6" data-key="footer.title">LaMeave</h2>
+        <div class="w-16 h-1 bg-hermes-orange mx-auto mb-6"></div>
+        <p class="text-gray-400 text-sm mb-8" data-key="footer.subtitle">
+            High-End Wellness Private Lounge<br>
+            Elevate Your Life with Us
+        </p>
+        <button class="bg-hermes-orange px-8 py-3 rounded-full text-sm font-bold hover:bg-white hover:text-hermes-orange transition-colors duration-300" data-key="footer.button">
+            문의 및 예약
+        </button>
+        <p class="text-xs text-gray-600 mt-12" data-key="footer.copyright">&copy; 2025 LaMeave. All rights reserved.</p>
+    </footer>
+
+    <!-- Firebase SDKs & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // [!!! 여기에 사용자님의 Firebase 설정 코드를 붙여넣으세요 !!!]
+        // Firebase Console > 프로젝트 설정 > 일반 > 내 앱 섹션에서 찾을 수 있습니다.
+        // 이 부분을 복사해서 통째로 붙여넣어야 합니다. (projectId, apiKey 등이 모두 포함되어야 함)
+const firebaseConfig = {
+    apiKey: "사용자님의_실제_API_KEY_값", 
+    authDomain: "사용자님의_실제_AUTH_DOMAIN_값",
+    projectId: "사용자님의_실제_PROJECT_ID_값",
+    storageBucket: "사용자님의_실제_STORAGE_BUCKET_값",
+    messagingSenderId: "사용자님의_실제_MESSAGING_SENDER_ID_값",
+    appId: "사용자님의_실제_APP_ID_값" 
+};
+        
+        let db;
+        const DOC_ID = 'lameave_content_v2';
+        
+        let contentData = {};
+        let styleData = {}; // Store custom styles: { "hero.title": "font-size: 64px; letter-spacing: 2px;" }
+        
+        // --- Initialization ---
+        async function init() {
+            try {
+                // Check if the config object is NOT empty (i.e., user has pasted their keys)
+                if(Object.keys(firebaseConfig).length > 0 && firebaseConfig.projectId) {
+                    const app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    const auth = getAuth(app);
+                    await signInAnonymously(auth);
+                    
+                    // Listen to Firestore
+                    onSnapshot(doc(db, 'content', DOC_ID), (snap) => {
+                        if(snap.exists()) {
+                            const data = snap.data();
+                            contentData = data.content || {};
+                            styleData = data.styles || {};
+                            renderAll();
+                        } else {
+                            // First time setup - Initialize DB with default content
+                            contentData = getDefaultContent();
+                            setDoc(doc(db, 'content', DOC_ID), {
+                                content: contentData,
+                                styles: styleData
+                            }).then(() => console.log("Initial data saved to Firestore."));
+                            renderAll();
+                        }
+                    });
+                } else {
+                    // Fallback for demo without DB
+                    console.log("Configuration missing. Using local default content (read-only demo mode).");
+                    contentData = getDefaultContent();
+                    renderAll();
+                }
+            } catch(e) {
+                console.error("Firebase initialization failed. Using local default content.", e);
+                contentData = getDefaultContent();
+                renderAll();
+            }
+        }
+
+        // --- Rendering ---
+        function renderAll() {
+            document.querySelectorAll('[data-key]').forEach(el => {
+                const key = el.getAttribute('data-key');
+                
+                // 1. Content
+                const val = getNested(contentData, key);
+                if(val) {
+                     if (key.includes('.price') && !el.classList.contains('font-sans')) {
+                        // Special rendering for price field
+                        el.innerHTML = `${val}<span class="text-sm text-gray-500 font-sans font-normal">원</span>`;
+                    } else {
+                        el.innerHTML = val;
+                    }
+                }
+
+                // 2. Styles
+                if(styleData[key]) {
+                    el.style.cssText = styleData[key];
+                }
+            });
+        }
+
+        function getNested(obj, path) {
+            return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+        }
+
+        function setNested(obj, path, value) {
+            const parts = path.split('.');
+            let current = obj;
+            for(let i=0; i<parts.length-1; i++) {
+                if(!current[parts[i]]) current[parts[i]] = {};
+                current = current[parts[i]];
+            }
+            current[parts[parts.length-1]] = value;
+        }
+
+        // --- Admin Logic ---
+        const ADMIN_PASSWORD = "8246"; // NOTE: In a real environment, this should be stored securely, not hardcoded.
+        let activeElement = null;
+
+        window.toggleAdminPanel = function() {
+            const modal = document.getElementById('password-modal');
+            modal.classList.remove('hidden');
+        }
+
+        window.checkPassword = function() {
+            const input = document.getElementById('admin-password');
+            const err = document.getElementById('password-error');
+            if(input.value === ADMIN_PASSWORD) {
+                document.getElementById('password-modal').classList.add('hidden');
+                enableAdminMode();
+            } else {
+                err.classList.remove('hidden');
+                setTimeout(()=>err.classList.add('hidden'), 2000);
+            }
+        }
+
+        function enableAdminMode() {
+            document.body.classList.add('editing-mode');
+            const toolbar = document.getElementById('admin-toolbar');
+            toolbar.classList.remove('hidden-toolbar');
+            
+            // Add click listeners
+            document.querySelectorAll('[data-key]').forEach(el => {
+                if(el.tagName !== 'CANVAS') {
+                    el.setAttribute('contenteditable', 'true');
+                    el.addEventListener('click', handleElementClick);
+                    el.addEventListener('blur', handleBlur); // Save content on blur
+                }
+            });
+        }
+
+        function handleElementClick(e) {
+            // Remove previous selection
+            if(activeElement) activeElement.classList.remove('admin-selected');
+            
+            activeElement = e.target.closest('[data-key]');
+            activeElement.classList.add('admin-selected');
+            
+            // Update Toolbar Status
+            const key = activeElement.getAttribute('data-key');
+            document.getElementById('selected-tag-name').innerText = key;
+        }
+
+        function handleBlur(e) {
+            // Save content to memory
+            const el = e.target;
+            const key = el.getAttribute('data-key');
+            let val = el.innerHTML;
+             if (key.includes('.price')) {
+                 // clean up span
+                 const match = val.match(/^(\d{1,3}(,\d{3})*)/);
+                 if(match) val = match[0];
+             }
+            setNested(contentData, key, val);
+        }
+
+        // --- Styling Functions ---
+        window.adjustStyle = function(prop, delta) {
+            if(!activeElement) return console.warn("먼저 수정할 텍스트를 클릭해주세요.");
+            
+            const style = window.getComputedStyle(activeElement);
+            let currentVal = parseFloat(style[prop]);
+            
+            if(prop === 'lineHeight' && isNaN(currentVal)) currentVal = 1.5; // default
+            
+            let newVal = currentVal + delta;
+            
+            // Apply
+            if(prop === 'fontSize') activeElement.style[prop] = newVal + 'px';
+            else if(prop === 'letterSpacing') activeElement.style[prop] = newVal + 'px';
+            else if(prop === 'lineHeight') activeElement.style[prop] = newVal;
+            
+            // Save to styleData
+            saveActiveStyle();
+        }
+
+        window.toggleStyle = function(prop, valOn, valOff) {
+            if(!activeElement) return console.warn("먼저 수정할 텍스트를 클릭해주세요.");
+            
+            const current = activeElement.style[prop];
+            activeElement.style[prop] = (current === valOn) ? valOff : valOn;
+            
+            saveActiveStyle();
+        }
+
+        function saveActiveStyle() {
+            const key = activeElement.getAttribute('data-key');
+            styleData[key] = activeElement.style.cssText;
+        }
+
+        // --- Save & Exit ---
+        window.saveAndExitAdmin = async function() {
+            // 1. Remove listeners & UI
+            document.querySelectorAll('[data-key]').forEach(el => {
+                el.removeAttribute('contenteditable');
+                el.classList.remove('admin-selected');
+                el.removeEventListener('click', handleElementClick);
+                el.removeEventListener('blur', handleBlur);
+            });
+            document.body.classList.remove('editing-mode');
+            document.getElementById('admin-toolbar').classList.add('hidden-toolbar');
+            activeElement = null;
+
+            // 2. Save to Firestore
+            if(db) {
+                try {
+                    await setDoc(doc(db, 'content', DOC_ID), {
+                        content: contentData,
+                        styles: styleData
+                    });
+                    console.log("저장되었습니다!");
+                    // Custom Alert instead of window.alert
+                    const saveMessage = document.createElement('div');
+                    saveMessage.innerHTML = `<div style="position:fixed; top:20px; right:20px; background-color:#F37021; color:white; padding:10px 20px; border-radius:8px; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.2); animation: fadein 0.5s;">✅ 저장 완료</div>
+                                            <style>@keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }</style>`;
+                    document.body.appendChild(saveMessage);
+                    setTimeout(() => saveMessage.remove(), 3000);
+                } catch(e) {
+                    console.error("저장 중 오류 발생: ", e);
+                    // Custom Alert instead of window.alert
+                    const errorMessage = document.createElement('div');
+                    errorMessage.innerHTML = `<div style="position:fixed; top:20px; right:20px; background-color:red; color:white; padding:10px 20px; border-radius:8px; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.2); animation: fadein 0.5s;">❌ 저장 오류: ${e.message.substring(0, 50)}...</div>
+                                            <style>@keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }</style>`;
+                    document.body.appendChild(errorMessage);
+                    setTimeout(() => errorMessage.remove(), 5000);
+                }
+            } else {
+                 // Custom Alert instead of window.alert
+                 const demoMessage = document.createElement('div');
+                 demoMessage.innerHTML = `<div style="position:fixed; top:20px; right:20px; background-color:#333; color:white; padding:10px 20px; border-radius:8px; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.2); animation: fadein 0.5s;">💾 체험 모드입니다. (새로고침하면 초기화됩니다)</div>
+                                         <style>@keyframes fadein { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }</style>`;
+                 document.body.appendChild(demoMessage);
+                 setTimeout(() => demoMessage.remove(), 4000);
+            }
+        }
+
+        // Default Content Data
+        function getDefaultContent() {
+            return {
+                nav: { logo: "LaMeave", link1: "Philosophy", link2: "Curriculum", link3: "Roadmap", link4: "Pricing", button: "예약하기" },
+                hero: { category: "French Chic Wellness Lounge", title: "Elevate Me,<br><span class=\"italic text-hermes-orange\">LaMeave</span>", subtitle: "내면(마음)과 외면(몸)의 균형을 되찾아,<br>나를 더 아름답게, 밝게, 가볍게 만드는 공간." },
+                // ... (Truncated for brevity, uses same structure as before)
+                etymology: { la: { title: "La", desc: "The", body: "더 높은 가치를 향한<br>유일한 선택" }, me: { title: "Me", desc: "Myself", body: "오롯이 나에게 집중하는<br>프라이빗 타임" }, ave: { title: "Ave", desc: "Elevate", body: "나의 아름다움을<br>가장 높게 끌어올리다" } },
+                philosophy: { title: "Why Homeostasis?", subtitle: "단순한 감량이 아닙니다. 깨진 신체 리듬을 바로잡아 <span class=\"text-hermes-orange font-bold\">살이 찌지 않는 체질</span>로 변화시키는 것이 목표입니다." },
+                philo_icon1: { emoji: "🌙", title: "Sleep", desc: "수면 패턴 안정화" }, philo_icon2: { emoji: "💧", title: "Hydration", desc: "올바른 수분 섭취" }, philo_icon3: { emoji: "🍽️", title: "Diet", desc: "영양 균형 식단" }, philo_icon4: { emoji: "🔥", title: "Metabolism", desc: "체온 유지 및 순환" },
+                curriculum: { category: "Curriculum", title: "70min Premium Care", summary: "\"웰컴티 → 인바디 상담 → 프렌치 엘레베이션 테라피 → 프렌치 리프팅 → 닥터 테라피\"" },
+                step0: { num: "0", title: "L'Orange Vital (웰컴 & 뉴트리션)", body: "근육 세포를 깨우는 <strong>크레아틴 & BCAA 웰컴티</strong>로 활력 시스템을 리셋합니다. 관리를 위한 몸의 활력 시스템을 리셋하는 LaMeave만의 시그니처 준비 단계입니다." },
+                step1: { num: "1", title: "Diagnostic Archiving (정밀 진단 & 홈케어)", body: "인바디 데이터와 8가지 생활 패턴 컨설팅을 통해 개인 맞춤형 <strong>항상성 회복 솔루션</strong>을 설계합니다." },
+                chart1: { title: "Body Balance Archive", subtitle: "Before vs Ideal Target", footer: "* 고객님의 현재 상태(수분, 근육, 순환 등)를 다각도로 분석하여 시각화합니다." },
+                chart2: { title: "Efficiency Comparison", subtitle: "LaMeave 20min vs Traditional Gym", footer: "* 단 20분 관리로 최대 6시간의 운동 효과를 경험하세요. (EMS 기능 기반)" },
+                step2: { num: "2", title: "French Élimination Therapy (엘레베이션)", subtitle: "EMS & Bio-Photon Therapy", body: "신체 균형을 되찾는 <strong>바이오포톤(빛)</strong>과 심부 근육을 자극하는 <strong>프렌치 EMS</strong>의 결합.<br>누워서 강력한 대사 활성화 및 지방 연소 효과를 끌어냅니다.", benefit1: "신진대사 활성화", benefit2: "심부 체온 상승", benefit3: "관절 부담 없는 근력 강화" },
+                step3: { num: "3", title: "French Illumination & Flow (프렌치 리프팅)", emoji: "✨", body: "<strong>화이트 태닝 & 순환실 케어</strong><br>콜라겐 생성을 촉진하여 피부 본연의 투명도와 탄력을 회복하고, 체내 독소 배출을 원활하게 합니다." },
+                step4: { num: "4", title: "Dr. Meave Finishing (닥터 테라피)", emoji: "💆‍♀️", body: "<strong>닥터 테라피 마사지 & 컨투어링 팩</strong><br>전문적인 림프 순환 집중 케어로 얼굴 및 바디의 윤곽을 정리하고, 프리미엄 팩으로 관리를 완성합니다." },
+                roadmap: { category: "The Journey", title: "Slim Roadmap", subtitle: "체중 감량은 직선이 아닙니다. LaMeave는 4단계 로드맵을 통해<br> 정체기를 극복하고 요요 없는 안정화를 이끌어냅니다." },
+                roadmap_ph1: { num: "1", title: "감량기 (Loss Phase)", desc: "신진대사 활성화로 지방 연소가 촉진되는 시기" }, roadmap_ph2: { num: "2", title: "정체기 (Plateau)", desc: "체질 변환이 중요한 시점. 체중 유지 및 근육 보호 집중." }, roadmap_ph3: { num: "3", title: "고도 감량기 (High Loss)", desc: "감량 가속화 및 눈에 띄는 체형 변화의 시기" }, roadmap_ph4: { num: "4", title: "체질 안정화 (Stabilization)", desc: "요요 없이 건강하고 살찌지 않는 체질 완성" },
+                chart4: { title: "Program Effectiveness", subtitle: "관리 횟수별 기대 감량 효과" },
+                pricing: { title: "Program Pricing", subtitle: "70min Premium Slim Care (EMS, Bio-Photon, White Tanning, Dr. Therapy)", tier1: { name: "Starter", price: "2,500,000", sessions: "24 Sessions", desc1: "기간: 2개월", desc2: "목표: 4kg 이상 감량", desc3: "단기 집중 케어", button: "Select Plan" }, tier2: { name: "Standard", tag: "Best Choice", price: "3,300,000", sessions: "36 Sessions", desc1: "기간: 3개월", desc2: "목표: 8kg 이상 감량", desc3: "체질 개선 최적화", desc4: "10% 추가 할인 적용", button: "Select Plan" }, tier3: { name: "Premium", price: "4,800,000", sessions: "60 Sessions", desc1: "기간: 5개월", desc2: "목표: 15kg 이상 감량", desc3: "완벽한 바디 리셋", button: "Select Plan" }, footer: "* VAT 포함 가격입니다." },
+                footer: { title: "LaMeave", subtitle: "High-End Wellness Private Lounge<br>Elevate Your Life with Us", button: "문의 및 예약", copyright: "&copy; 2025 LaMeave. All rights reserved." }
+            };
+        }
+
+        init();
+    </script>
+    <script>
+        // Charts Initialization (Same as before)
+        const commonOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { font: { family: "'Noto Sans KR', sans-serif" } } } } };
+        
+        new Chart(document.getElementById('bodyBalanceChart').getContext('2d'), {
+            type: 'radar',
+            data: { labels: ['근육', '수분', '대사', '순환', '라인'], datasets: [{ label: 'Before', data: [40, 50, 45, 30, 40], backgroundColor: 'rgba(150,150,150,0.2)', borderColor: '#999', borderWidth: 1 }, { label: 'Goal', data: [85, 90, 85, 90, 95], backgroundColor: 'rgba(243,112,33,0.2)', borderColor: '#F37021', borderWidth: 2 }] },
+            options: { ...commonOptions, scales: { r: { suggestedMin: 0, suggestedMax: 100 } } }
+        });
+        
+        new Chart(document.getElementById('efficiencyChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: ['시간', '자극', '체온'], datasets: [{ label: 'Gym', data: [180, 40, 30], backgroundColor: '#E5E5E5' }, { label: 'LaMeave', data: [20, 95, 90], backgroundColor: '#F37021' }] },
+            options: { ...commonOptions, indexAxis: 'y', scales: { x: { display: false }, y: { grid: { display: false } } } }
+        });
+
+        new Chart(document.getElementById('roadmapChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: ['Start', 'Loss', 'Plateau', 'High Loss', 'Stable'], datasets: [{ label: 'Weight', data: [100, 85, 85, 65, 60], borderColor: '#F37021', backgroundColor: 'rgba(243,112,33,0.1)', fill: true, tension: 0.4 }] },
+            options: { ...commonOptions, scales: { y: { display: false }, x: { grid: { color: 'rgba(255,255,255,0.1)' } } }, plugins: { legend: { display: false } } }
+        });
+
+        new Chart(document.getElementById('effectivenessChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: ['24회', '36회', '60회'], datasets: [{ label: '감량(kg)', data: [4, 8, 15], backgroundColor: ['rgba(243,112,33,0.4)', 'rgba(243,112,33,0.7)', '#F37021'] }] },
+            options: { ...commonOptions, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } }
+        });
+    </script>
+</body>
+</html>
